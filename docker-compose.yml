@@ -1,0 +1,74 @@
+version: "3"
+
+services:
+  fief-auth-server:
+    image: ghcr.io/fief-dev/fief:latest
+    command: fief run-server --port 8002
+    ports:
+      - 8002:8002
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env
+    networks:
+      - fief-auth-network
+
+  fief-auth-worker:
+    image: ghcr.io/fief-dev/fief:latest
+    command: fief run-worker -p 1 -t 1
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env
+    restart: on-failure
+    networks:
+      - fief-auth-network
+
+  postgres:
+    image: postgres:alpine
+    ports:
+      - 5436:5432
+    environment:
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_USER=${DATABASE_USERNAME}
+      - POSTGRES_DB=${DATABASE_NAME}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - fief-auth-network
+
+  redis:
+    image: redis:alpine
+    command: redis-server --save 60 1 --loglevel DEBUG
+    volumes:
+      - redis-data:/data
+    restart: always
+    networks:
+      - fief-auth-network
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - fief-auth-server
+    restart: always
+    env_file:
+      - .env
+    networks:
+      - fief-auth-network
+
+volumes:
+  redis-data:
+  postgres-data:
+  nginx:
+
+networks:
+  fief-auth-network:
